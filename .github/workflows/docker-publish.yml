@@ -12,8 +12,8 @@ on:
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
-  # Image name explicitly set to nginx-sample
-  IMAGE_NAME: nginx-sample
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
