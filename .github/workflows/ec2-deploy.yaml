@@ -1,0 +1,58 @@
+name: Push-to-EC2
+
+# Trigger deployment only on push to the main branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to EC2 on main branch push
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository on the GitHub runner
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      # Step 2: Copy repository files to the target EC2 directory
+      - name: Copy Repository to EC2
+        uses: easingthemes/ssh-deploy@main
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          REMOTE_USER: ${{ secrets.USERNAME }}
+          TARGET: ${{ secrets.TARGET_DIR }}
+
+      # Step 3: Prepare and Run Airflow Docker Compose on the EC2 instance
+      - name: Prepare and Run Docker Compose
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_DNS }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo yum update -y
+            sudo yum install -y docker
+            sudo systemctl start docker
+            sudo systemctl enable docker
+            # Install Docker Compose
+            sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            # Verify Docker Compose installation
+            docker-compose --version
+            # Ensure user has access to Docker without sudo
+            sudo usermod -aG docker $USER
+            newgrp docker
+            id $USER
+            sudo systemctl restart docker
+            # Navigate to target directory
+            cd ${{ secrets.TARGET_DIR }}
+            # Create .env file for Airflow
+            echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0" > .env
+            # Run Docker Compose
+            sudo docker-compose down
+            sudo docker-compose up -d
+            # Wait for 30 seconds
+            sleep 30
